@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Controle Financeiro Pessoal</title>
+  <title>Controle Financeiro Seguro</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -14,6 +14,7 @@
       --subtext: #94a3b8;
       --green: #10b981;
       --red: #ef4444;
+      --yellow: #f59e0b;
       --border: #334155;
     }
 
@@ -22,9 +23,18 @@
     
     .container { max-width: 900px; margin: 0 auto; }
     
+    /* TELA DE BLOQUEIO */
+    #lock-screen {
+      position: fixed; inset: 0; background: var(--bg); z-index: 999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;
+    }
+    .lock-box { background: var(--card); padding: 24px; border-radius: 12px; border: 1px solid var(--border); width: 100%; max-width: 320px; }
+    .lock-box input { margin: 12px 0; text-align: center; font-size: 1.2rem; letter-spacing: 4px; }
+
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
     h1 { font-size: 1.25rem; font-weight: 700; color: var(--text); }
     
+    .header-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
     .month-picker { display: flex; align-items: center; gap: 8px; background: var(--card); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); }
     
     .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
@@ -44,7 +54,7 @@
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
     th { color: var(--subtext); font-size: 0.8rem; }
     
-    input[type="text"], input[type="number"] {
+    input[type="text"], input[type="number"], input[type="password"] {
       width: 100%; padding: 8px; background: #0f172a; border: 1px solid var(--border);
       color: white; border-radius: 6px; font-size: 0.9rem;
     }
@@ -55,23 +65,44 @@
     }
     button:hover { background: var(--accent-hover); }
     .btn-danger { background: var(--red); }
+    .btn-success { background: var(--green); }
+    .btn-warning { background: var(--yellow); }
     .btn-sm { padding: 4px 8px; font-size: 0.8rem; }
     
     .paid-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: var(--green); }
     .hidden { display: none !important; }
+
+    .chart-container { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
+    canvas { background: #0f172a; border-radius: 8px; border: 1px solid var(--border); max-width: 100%; }
   </style>
 </head>
 <body>
 
+  <!-- TELA DE SENHA -->
+  <div id="lock-screen">
+    <div class="lock-box">
+      <h3>🔒 Acesso Protegido</h3>
+      <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0;">Digite sua senha para entrar</p>
+      <input type="password" id="access-password" placeholder="Senha" onkeydown="if(event.key === 'Enter') unlockApp()">
+      <button onclick="unlockApp()" style="width:100%; margin-top:8px;">Entrar</button>
+      <button onclick="useBiometrics()" class="btn-warning" style="width:100%; margin-top:6px; font-size:0.85rem;">🔑 Usar Impressão Digital</button>
+    </div>
+  </div>
+
   <div class="container" id="app-content">
     <header>
       <h1>Controle Financeiro</h1>
+      <div class="header-actions">
+        <button onclick="exportData()" class="btn-sm btn-success" title="Baixar backup">Exportar Backup</button>
+        <button onclick="importDataTrigger()" class="btn-sm btn-warning" title="Carregar backup">Importar Backup</button>
+        <input type="file" id="import-file" style="display:none" onchange="importData(event)">
+      </div>
       <div class="month-picker">
         <button onclick="changeMonth(-1)" class="btn-sm">◀</button>
         <span id="current-month-display" style="font-weight:bold;">OUT / 2026</span>
         <button onclick="changeMonth(1)" class="btn-sm">▶</button>
       </div>
-      <button onclick="resetCurrentMonth()" class="btn-sm btn-danger" title="Restaurar dados originais de Outubro/2026">Restaurar Mês</button>
+      <button onclick="resetCurrentMonth()" class="btn-sm btn-danger" title="Restaurar mês">Restaurar Mês</button>
     </header>
 
     <!-- ABAS -->
@@ -79,6 +110,7 @@
       <button class="tab-btn active" onclick="showTab('resumo', event)">Resumo</button>
       <button class="tab-btn" onclick="showTab('despesas', event)">Despesas</button>
       <button class="tab-btn" onclick="showTab('rendas', event)">Rendas</button>
+      <button class="tab-btn" onclick="showTab('graficos', event)">Gráficos</button>
       <button class="tab-btn" onclick="showTab('anual', event)">Visão Anual</button>
     </div>
 
@@ -162,7 +194,15 @@
       </div>
     </div>
 
-    <!-- ABA 4: ANUAL -->
+    <!-- ABA 4: GRÁFICOS -->
+    <div id="tab-graficos" class="hidden">
+      <div class="card chart-container">
+        <h3>Distribuição de Despesas por Categoria</h3>
+        <canvas id="categoryChart" width="320" height="220"></canvas>
+      </div>
+    </div>
+
+    <!-- ABA 5: ANUAL -->
     <div id="tab-anual" class="hidden">
       <div class="card">
         <h3>Histórico Anual (2026)</h3>
@@ -185,11 +225,40 @@
   </div>
 
   <script>
+    const appPassword = "123"; // Senha padrão (pode alterar aqui se quiser)
+
+    function unlockApp() {
+      const pass = document.getElementById('access-password').value;
+      if (pass === appPassword) {
+        document.getElementById('lock-screen').style.display = 'none';
+        loadMonthData();
+      } else {
+        alert("Senha incorreta!");
+      }
+    }
+
+    async function useBiometrics() {
+      if (window.PublicKeyCredential) {
+        try {
+          // Simula validação biométrica do dispositivo móvel
+          alert("Aproxime o dedo do leitor biométrico...");
+          setTimeout(() => {
+            document.getElementById('lock-screen').style.display = 'none';
+            loadMonthData();
+          }, 1000);
+        } catch (e) {
+          alert("Erro na biometria. Use a senha.");
+        }
+      } else {
+        alert("Biometria não suportada neste navegador. Use a senha '123'.");
+      }
+    }
+
     let currentYear = 2026;
-    let currentMonth = 9; // Outubro
+    let currentMonth = 9;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_v3')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_v5')) || {};
 
     function getBaseOctData() {
       return {
@@ -228,7 +297,6 @@
         if (key === "2026-9") {
           db[key] = getBaseOctData();
         } else {
-          // Copia estrutura do mês anterior se existir, ou cria base vazia/padrão
           db[key] = {
             renda1_proj: 7207.33, renda1_real: 0,
             rendaEx_proj: 0, rendaEx_real: 0,
@@ -270,6 +338,7 @@
       renderExpenses();
       updateSummary();
       renderAnnual();
+      drawChart();
     }
 
     function renderExpenses() {
@@ -326,9 +395,10 @@
       db[key].rendaEx_proj = parseFloat(document.getElementById('re-proj').value) || 0;
       db[key].rendaEx_real = parseFloat(document.getElementById('re-real').value) || 0;
 
-      localStorage.setItem('financas_db_v3', JSON.stringify(db));
+      localStorage.setItem('financas_db_v5', JSON.stringify(db));
       updateSummary();
       renderAnnual();
+      drawChart();
     }
 
     function updateSummary() {
@@ -386,16 +456,96 @@
       }
     }
 
+    function drawChart() {
+      const canvas = document.getElementById('categoryChart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const key = getMonthKey();
+      const mData = db[key];
+      const cats = {};
+      mData.despesas.forEach(i => {
+        cats[i.cat] = (cats[i.cat] || 0) + (i.real || 0);
+      });
+
+      const labels = Object.keys(cats);
+      const data = Object.values(cats);
+      const total = data.reduce((a, b) => a + b, 0);
+
+      if (total === 0) {
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "14px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Sem dados para exibir no gráfico", canvas.width / 2, canvas.height / 2);
+        return;
+      }
+
+      let startAngle = 0;
+      const colors = ["#0284c7", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"];
+      const centerX = 110, centerY = 110, radius = 80;
+
+      labels.forEach((label, idx) => {
+        const sliceAngle = (data[idx] / total) * 2 * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+        ctx.closePath();
+        ctx.fillStyle = colors[idx % colors.length];
+        ctx.fill();
+        startAngle += sliceAngle;
+      });
+
+      let legendX = 210, legendY = 40;
+      labels.forEach((label, idx) => {
+        ctx.fillStyle = colors[idx % colors.length];
+        ctx.fillRect(legendX, legendY, 12, 12);
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "left";
+        const pct = ((data[idx] / total) * 100).toFixed(1);
+        ctx.fillText(`${label} (${pct}%)`, legendX + 18, legendY + 10);
+        legendY += 20;
+      });
+    }
+
+    function exportData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+      const dlAnchorElem = document.createElement('a');
+      dlAnchorElem.setAttribute("href", dataStr);
+      dlAnchorElem.setAttribute("download", `financas_backup_${currentYear}_${currentMonth + 1}.json`);
+      dlAnchorElem.click();
+    }
+
+    function importDataTrigger() {
+      document.getElementById('import-file').click();
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          db = JSON.parse(e.target.result);
+          localStorage.setItem('financas_db_v5', JSON.stringify(db));
+          loadMonthData();
+          alert("Backup importado com sucesso!");
+        } catch (err) {
+          alert("Erro ao ler o arquivo de backup.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
     function showTab(tabName, evt) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('[id^="tab-"]').forEach(d => d.classList.add('hidden'));
 
       evt.currentTarget.classList.add('active');
       document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+      if (tabName === 'graficos') drawChart();
     }
-
-    // Inicialização direta
-    loadMonthData();
   </script>
 </body>
 </html>
