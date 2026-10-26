@@ -180,35 +180,31 @@
     <!-- ABA 3: RENDAS -->
     <div id="tab-rendas" class="hidden">
       <div class="card">
-        <h3>Entradas e Rendas</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Fonte</th>
-              <th>Projeção (R$)</th>
-              <th>Real (R$)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Renda 1</td>
-              <td><input type="number" id="r1-proj" step="0.01" oninput="saveData()"></td>
-              <td><input type="number" id="r1-real" step="0.01" oninput="saveData()"></td>
-            </tr>
-            <tr>
-              <td>Renda Extra</td>
-              <td><input type="number" id="re-proj" step="0.01" oninput="saveData()"></td>
-              <td><input type="number" id="re-real" step="0.01" oninput="saveData()"></td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <td style="text-align:right;"><strong>TOTAL RENDAS:</strong></td>
-              <td id="total-renda-proj" style="color:var(--yellow);">R$ 0,00</td>
-              <td id="total-renda-real" style="color:var(--green);">R$ 0,00</td>
-            </tr>
-          </tfoot>
-        </table>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3>Entradas e Rendas</h3>
+          <button onclick="addIncome()" class="btn-sm">+ Nova Renda</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Fonte / Descrição</th>
+                <th>Projeção (R$)</th>
+                <th>Real (R$)</th>
+                <th style="width:40px;">Ação</th>
+              </tr>
+            </thead>
+            <tbody id="income-table-body"></tbody>
+            <tfoot>
+              <tr>
+                <td style="text-align:right;"><strong>TOTAL RENDAS:</strong></td>
+                <td id="total-renda-proj" style="color:var(--yellow);">R$ 0,00</td>
+                <td id="total-renda-real" style="color:var(--green);">R$ 0,00</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -256,7 +252,6 @@
   </div>
 
   <script>
-    // Lógica de Autenticação Robusta e Direta
     document.getElementById('btn-unlock').addEventListener('click', processLogin);
     document.getElementById('access-password').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') processLogin();
@@ -290,12 +285,13 @@
     let currentMonth = 9;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_v10')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_v11')) || {};
 
     function getBaseOctData() {
       return {
-        renda1_proj: 7207.33, renda1_real: 6414.52,
-        rendaEx_proj: 0, rendaEx_real: 0,
+        rendas: [
+          { name: "Renda 1", proj: 7207.33, real: 6414.52 }
+        ],
         despesas: [
           { name: "Aluguel", cat: "Moradia", proj: 2160, real: 2160, paid: true },
           { name: "Cel Claro", cat: "Moradia", proj: 73.90, real: 73.90, paid: true },
@@ -330,10 +326,19 @@
           db[key] = getBaseOctData();
         } else {
           db[key] = {
-            renda1_proj: 7207.33, renda1_real: 0,
-            rendaEx_proj: 0, rendaEx_real: 0,
+            rendas: [{ name: "Renda 1", proj: 7207.33, real: 0 }],
             despesas: getBaseOctData().despesas.map(d => ({ ...d, real: d.proj, paid: false }))
           };
+        }
+      } else {
+        // Compatibilidade com estruturas antigas que usavam campos fixos
+        if (!db[key].rendas) {
+          db[key].rendas = [
+            { name: "Renda 1", proj: db[key].renda1_proj || 0, real: db[key].renda1_real || 0 }
+          ];
+          if ((db[key].rendaEx_proj || 0) > 0 || (db[key].rendaEx_real || 0) > 0) {
+            db[key].rendas.push({ name: "Renda Extra", proj: db[key].rendaEx_proj || 0, real: db[key].rendaEx_real || 0 });
+          }
         }
       }
     }
@@ -361,16 +366,52 @@
       document.getElementById('current-month-display').innerText = `${monthNames[currentMonth]} / ${currentYear}`;
       initMonth(key);
       
-      const mData = db[key];
-      document.getElementById('r1-proj').value = mData.renda1_proj ?? 0;
-      document.getElementById('r1-real').value = mData.renda1_real ?? 0;
-      document.getElementById('re-proj').value = mData.rendaEx_proj ?? 0;
-      document.getElementById('re-real').value = mData.rendaEx_real ?? 0;
-
+      renderIncomes();
       renderExpenses();
       updateSummary();
       renderAnnual();
       drawChart();
+    }
+
+    function renderIncomes() {
+      const key = getMonthKey();
+      const list = db[key].rendas;
+      const tbody = document.getElementById('income-table-body');
+      tbody.innerHTML = '';
+
+      list.forEach((item, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input type="text" value="${item.name}" oninput="updateIncome(${idx}, 'name', this.value)"></td>
+          <td><input type="number" step="0.01" value="${item.proj}" oninput="updateIncome(${idx}, 'proj', this.value)"></td>
+          <td><input type="number" step="0.01" value="${item.real}" oninput="updateIncome(${idx}, 'real', this.value)"></td>
+          <td><button onclick="deleteIncome(${idx})" class="btn-sm btn-danger">X</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function updateIncome(idx, field, val) {
+      const key = getMonthKey();
+      if (field === 'proj' || field === 'real') val = parseFloat(val) || 0;
+      db[key].rendas[idx][field] = val;
+      saveData();
+    }
+
+    function addIncome() {
+      const key = getMonthKey();
+      db[key].rendas.push({ name: "Nova Renda", proj: 0, real: 0 });
+      saveData();
+      renderIncomes();
+      updateSummary();
+    }
+
+    function deleteIncome(idx) {
+      const key = getMonthKey();
+      db[key].rendas.splice(idx, 1);
+      saveData();
+      renderIncomes();
+      updateSummary();
     }
 
     function renderExpenses() {
@@ -421,13 +462,7 @@
     }
 
     function saveData() {
-      const key = getMonthKey();
-      db[key].renda1_proj = parseFloat(document.getElementById('r1-proj').value) || 0;
-      db[key].renda1_real = parseFloat(document.getElementById('r1-real').value) || 0;
-      db[key].rendaEx_proj = parseFloat(document.getElementById('re-proj').value) || 0;
-      db[key].rendaEx_real = parseFloat(document.getElementById('re-real').value) || 0;
-
-      localStorage.setItem('financas_db_v10', JSON.stringify(db));
+      localStorage.setItem('financas_db_v11', JSON.stringify(db));
       updateSummary();
       renderAnnual();
       drawChart();
@@ -437,8 +472,12 @@
       const key = getMonthKey();
       const mData = db[key];
       
-      const rendaProj = (mData.renda1_proj || 0) + (mData.rendaEx_proj || 0);
-      const rendaTotal = (mData.renda1_real || 0) + (mData.rendaEx_real || 0);
+      let rendaProj = 0;
+      let rendaTotal = 0;
+      mData.rendas.forEach(r => {
+        rendaProj += (r.proj || 0);
+        rendaTotal += (r.real || 0);
+      });
       
       let custoProj = 0;
       let custoTotal = 0;
@@ -484,9 +523,10 @@
         const key = `${currentYear}-${m}`;
         if (db[key]) {
           const mData = db[key];
-          const renda = (mData.renda1_real || 0) + (mData.rendaEx_real || 0);
+          let renda = 0;
+          (mData.rendas || []).forEach(r => renda += (r.real || 0));
           let custo = 0;
-          mData.despesas.forEach(i => custo += (i.real || 0));
+          (mData.despesas || []).forEach(i => custo += (i.real || 0));
           const saldo = renda - custo;
 
           const tr = document.createElement('tr');
@@ -573,7 +613,7 @@
       reader.onload = function(e) {
         try {
           db = JSON.parse(e.target.result);
-          localStorage.setItem('financas_db_v10', JSON.stringify(db));
+          localStorage.setItem('financas_db_v11', JSON.stringify(db));
           loadMonthData();
           alert("Backup importado com sucesso!");
         } catch (err) {
