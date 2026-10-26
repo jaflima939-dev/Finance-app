@@ -22,6 +22,14 @@
     body { background-color: var(--bg); color: var(--text); min-height: 100vh; padding: 12px; }
     
     .container { max-width: 900px; margin: 0 auto; }
+    
+    /* TELA DE BLOQUEIO */
+    #lock-screen {
+      position: fixed; inset: 0; background: var(--bg); z-index: 99999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;
+    }
+    .lock-box { background: var(--card); padding: 24px; border-radius: 12px; border: 1px solid var(--border); width: 100%; max-width: 320px; }
+    .lock-box input { margin: 12px 0; text-align: center; font-size: 1.2rem; letter-spacing: 4px; }
 
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
     h1 { font-size: 1.25rem; font-weight: 700; color: var(--text); }
@@ -75,6 +83,16 @@
 </head>
 <body>
 
+  <!-- TELA DE SENHA OBRIGATÓRIA -->
+  <div id="lock-screen">
+    <div class="lock-box">
+      <h3>🔒 Acesso Protegido</h3>
+      <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0;">Digite sua senha (padrão: 123)</p>
+      <input type="password" id="access-password" placeholder="Senha" autofocus>
+      <button onclick="processLogin()" style="width:100%; margin-top:4px;">Entrar</button>
+    </div>
+  </div>
+
   <div class="container">
     <header>
       <h1>Controle Financeiro</h1>
@@ -88,7 +106,7 @@
         <span id="current-month-display" style="font-weight:bold;">OUT / 2026</span>
         <button onclick="changeMonth(1)" class="btn-sm">▶</button>
       </div>
-      <button onclick="resetCurrentMonth()" class="btn-sm btn-danger" title="Restaurar mês">Restaurar Mês</button>
+      <button onclick="resetCurrentMonth()" class="btn-sm btn-danger" title="Limpar mês">Limpar Mês</button>
     </header>
 
     <!-- ABAS -->
@@ -206,7 +224,14 @@
     <!-- ABA 5: ANUAL -->
     <div id="tab-anual" class="hidden">
       <div class="card">
-        <h3>Histórico Anual (2026)</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+          <h3>Histórico Anual</h3>
+          <div class="month-picker">
+            <button onclick="changeAnnualYear(-1)" class="btn-sm">◀</button>
+            <span id="annual-year-display" style="font-weight:bold;">2026</span>
+            <button onclick="changeAnnualYear(1)" class="btn-sm">▶</button>
+          </div>
+        </div>
         <div style="overflow-x:auto;">
           <table>
             <thead>
@@ -218,94 +243,105 @@
               </tr>
             </thead>
             <tbody id="annual-table-body"></tbody>
+            <tfoot>
+              <tr style="background: rgba(255,255,255,0.04);">
+                <td><strong>TOTAL DO ANO:</strong></td>
+                <td id="annual-total-renda" style="color:var(--green)">R$ 0,00</td>
+                <td id="annual-total-custo" style="color:var(--red)">R$ 0,00</td>
+                <td id="annual-total-saldo">R$ 0,00</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ABA 6: CONFIGURAÇÕES -->
+    <!-- ABA 6: CONFIGURAÇÕES / SENHA -->
     <div id="tab-config" class="hidden">
       <div class="card" style="max-width: 400px;">
-        <h3>Configurações</h3>
-        <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0 16px 0;">Aplicativo desbloqueado com sucesso.</p>
+        <h3>Segurança e Senha</h3>
+        <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0 16px 0;">Altere a senha de acesso ao seu controle financeiro diretamente por aqui.</p>
+        
+        <label style="font-size:0.85rem; color:var(--subtext);">Nova Senha:</label>
+        <input type="password" id="new-password" placeholder="Digite a nova senha">
+        
+        <button onclick="changeAppPassword()" class="btn-success" style="width:100%; margin-top:8px;">Salvar Nova Senha</button>
       </div>
     </div>
 
   </div>
 
   <script>
+    document.getElementById('access-password').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') processLogin();
+    });
+
+    function processLogin() {
+      const inputPass = document.getElementById('access-password').value;
+      const savedPass = localStorage.getItem('financas_pass') || "123";
+
+      if (inputPass === savedPass) {
+        document.getElementById('lock-screen').style.display = 'none';
+        loadMonthData();
+      } else {
+        alert("Senha incorreta! Use 123");
+        document.getElementById('access-password').value = '';
+      }
+    }
+
+    function changeAppPassword() {
+      const newPass = document.getElementById('new-password').value;
+      if (!newPass) {
+        alert("Digite uma senha válida.");
+        return;
+      }
+      localStorage.setItem('financas_pass', newPass);
+      document.getElementById('new-password').value = '';
+      alert("Senha alterada com sucesso!");
+    }
+
     let currentYear = 2026;
     let currentMonth = 9;
+    let annualViewYear = 2026;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_v15')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_clean_v1')) || {};
 
-    function getBaseOctData() {
+    function getEmptyMonthData() {
       return {
         rendas: [
-          { name: "Renda 1", proj: 7207.33, real: 6414.52 }
+          { name: "Renda Principal", proj: 0, real: 0 }
         ],
         despesas: [
-          { name: "Dízimo", cat: "Doações", proj: 720.73, real: 641.45, paid: true },
-          { name: "Aluguel", cat: "Moradia", proj: 2160, real: 2160, paid: true },
-          { name: "Cel Claro", cat: "Moradia", proj: 73.90, real: 73.90, paid: true },
-          { name: "Conta de luz", cat: "Moradia", proj: 451.00, real: 453.00, paid: true },
-          { name: "Gás", cat: "Moradia", proj: 140.00, real: 130.00, paid: true },
-          { name: "Internet Maxx", cat: "Moradia", proj: 130.00, real: 119.90, paid: true },
-          { name: "Aluguel Alc", cat: "Moradia", proj: 150.00, real: 150.00, paid: true },
-          { name: "Despesas Alc", cat: "Moradia", proj: 100.00, real: 70.00, paid: true },
-          { name: "Financiam Car", cat: "Transporte", proj: 441.00, real: 441.00, paid: true },
-          { name: "Bus", cat: "Transporte", proj: 80.00, real: 70.00, paid: false },
-          { name: "Uber/99", cat: "Transporte", proj: 100.00, real: 90.00, paid: false },
-          { name: "Supermercado", cat: "Alimentação", proj: 700.00, real: 700.00, paid: true },
-          { name: "Médicos", cat: "Cuidados Pessoais", proj: 300.00, real: 150.00, paid: true },
-          { name: "Academia", cat: "Cuidados Pessoais", proj: 125.00, real: 125.00, paid: true },
-          { name: "Shows", cat: "Entretenimento", proj: 150.00, real: 150.00, paid: true },
-          { name: "Pessoal", cat: "Empréstimos", proj: 140.00, real: 140.00, paid: true },
-          { name: "Cartão Inter", cat: "Empréstimos", proj: 170.00, real: 170.00, paid: true },
-          { name: "Pague leve", cat: "Empréstimos", proj: 325.31, real: 300.00, paid: false },
-          { name: "Henrique", cat: "Empréstimos", proj: 427.74, real: 427.74, paid: true },
-          { name: "Nubank", cat: "Empréstimos", proj: 100.00, real: 97.00, paid: true },
-          { name: "Acordo Itaú", cat: "Empréstimos", proj: 276.55, real: 276.55, paid: true },
-          { name: "RD10", cat: "Empréstimos", proj: 146.00, real: 446.00, paid: true },
-          { name: "Doações", cat: "Doações", proj: 120.00, real: 70.00, paid: true },
-          { name: "LI CASTELL", cat: "Investimentos", proj: 0, real: 0, paid: false }
+          { name: "Dízimo", cat: "Doações", proj: 0, real: 0, paid: false }
         ]
       };
     }
 
     function initMonth(key) {
       if (!db[key]) {
-        if (key === "2026-9") {
-          db[key] = getBaseOctData();
-        } else {
-          db[key] = {
-            rendas: [{ name: "Renda 1", proj: 7207.33, real: 0 }],
-            despesas: [
-              { name: "Dízimo", cat: "Doações", proj: 720.73, real: 0, paid: false },
-              ...getBaseOctData().despesas.filter(d => d.name !== "Dízimo").map(d => ({ ...d, real: d.proj, paid: false }))
-            ]
-          };
-        }
+        db[key] = getEmptyMonthData();
       } else {
         if (!db[key].rendas) {
-          db[key].rendas = [
-            { name: "Renda 1", proj: db[key].renda1_proj || 0, real: db[key].renda1_real || 0 }
-          ];
+          db[key].rendas = [{ name: "Renda Principal", proj: 0, real: 0 }];
         }
+        if (!db[key].despesas) {
+          db[key].despesas = [];
+        }
+        // Garante que o Dízimo exista
         if (!db[key].despesas.some(d => d.name.toLowerCase().includes("dízimo"))) {
-          let totalRendaProj = 0;
-          db[key].rendas.forEach(r => totalRendaProj += (r.proj || 0));
-          db[key].despesas.unshift({ name: "Dízimo", cat: "Doações", proj: totalRendaProj * 0.1, real: 0, paid: false });
+          db[key].despesas.unshift({ name: "Dízimo", cat: "Doações", proj: 0, real: 0, paid: false });
         }
       }
     }
 
     function resetCurrentMonth() {
-      const key = `${currentYear}-${currentMonth}`;
-      db[key] = getBaseOctData();
-      saveData();
-      loadMonthData();
+      if (confirm("Deseja limpar todos os dados deste mês?")) {
+        const key = `${currentYear}-${currentMonth}`;
+        db[key] = getEmptyMonthData();
+        saveData();
+        loadMonthData();
+      }
     }
 
     function getMonthKey() {
@@ -317,6 +353,11 @@
       if (currentMonth < 0) { currentMonth = 11; currentYear--; }
       if (currentMonth > 11) { currentMonth = 0; currentYear++; }
       loadMonthData();
+    }
+
+    function changeAnnualYear(delta) {
+      annualViewYear += delta;
+      renderAnnual();
     }
 
     function loadMonthData() {
@@ -360,6 +401,7 @@
         totalReal += (r.real || 0);
       });
 
+      // Atualiza automaticamente o Dízimo para 10% da renda
       db[key].despesas.forEach(d => {
         if (d.name.toLowerCase().includes("dízimo")) {
           d.proj = totalProj * 0.1;
@@ -435,7 +477,7 @@
     }
 
     function saveData() {
-      localStorage.setItem('financas_db_v15', JSON.stringify(db));
+      localStorage.setItem('financas_db_clean_v1', JSON.stringify(db));
       updateSummary();
       renderAnnual();
       drawChart();
@@ -489,29 +531,44 @@
     }
 
     function renderAnnual() {
+      document.getElementById('annual-year-display').innerText = annualViewYear;
       const tbody = document.getElementById('annual-table-body');
       tbody.innerHTML = '';
 
-      for (let m = 0; m < 12; m++) {
-        const key = `${currentYear}-${m}`;
-        if (db[key]) {
-          const mData = db[key];
-          let renda = 0;
-          (mData.rendas || []).forEach(r => renda += (r.real || 0));
-          let custo = 0;
-          (mData.despesas || []).forEach(i => custo += (i.real || 0));
-          const saldo = renda - custo;
+      let totalYearRenda = 0;
+      let totalYearCusto = 0;
 
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><strong>${monthNames[m]}</strong></td>
-            <td style="color:var(--green)">R$ ${renda.toFixed(2)}</td>
-            <td style="color:var(--red)">R$ ${custo.toFixed(2)}</td>
-            <td style="color:${saldo >= 0 ? 'var(--green)' : 'var(--red)'}">R$ ${saldo.toFixed(2)}</td>
-          `;
-          tbody.appendChild(tr);
+      for (let m = 0; m < 12; m++) {
+        const key = `${annualViewYear}-${m}`;
+        const mData = db[key];
+        let renda = 0;
+        let custo = 0;
+
+        if (mData) {
+          (mData.rendas || []).forEach(r => renda += (r.real || 0));
+          (mData.despesas || []).forEach(i => custo += (i.real || 0));
         }
+
+        totalYearRenda += renda;
+        totalYearCusto += custo;
+        const saldo = renda - custo;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${monthNames[m]}</strong></td>
+          <td style="color:var(--green)">R$ ${renda.toFixed(2)}</td>
+          <td style="color:var(--red)">R$ ${custo.toFixed(2)}</td>
+          <td style="color:${saldo >= 0 ? 'var(--green)' : 'var(--red)'}">R$ ${saldo.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
       }
+
+      const totalYearSaldo = totalYearRenda - totalYearCusto;
+      document.getElementById('annual-total-renda').innerText = `R$ ${totalYearRenda.toFixed(2)}`;
+      document.getElementById('annual-total-custo').innerText = `R$ ${totalYearCusto.toFixed(2)}`;
+      const saldoTotalEl = document.getElementById('annual-total-saldo');
+      saldoTotalEl.innerText = `R$ ${totalYearSaldo.toFixed(2)}`;
+      saldoTotalEl.style.color = totalYearSaldo >= 0 ? 'var(--green)' : 'var(--red)';
     }
 
     function drawChart() {
@@ -586,7 +643,7 @@
       reader.onload = function(e) {
         try {
           db = JSON.parse(e.target.result);
-          localStorage.setItem('financas_db_v15', JSON.stringify(db));
+          localStorage.setItem('financas_db_clean_v1', JSON.stringify(db));
           loadMonthData();
           alert("Backup importado com sucesso!");
         } catch (err) {
@@ -603,10 +660,8 @@
       evt.currentTarget.classList.add('active');
       document.getElementById(`tab-${tabName}`).classList.remove('hidden');
       if (tabName === 'graficos') drawChart();
+      if (tabName === 'anual') renderAnnual();
     }
-
-    // Executa imediatamente ao carregar
-    loadMonthData();
   </script>
 </body>
 </html>
