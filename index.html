@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Controle Financeiro Pessoal</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #0284c7;
+      --accent-hover: #0369a1;
+      --text: #f8fafc;
+      --subtext: #94a3b8;
+      --green: #10b981;
+      --red: #ef4444;
+      --border: #334155;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; padding: 12px; }
+    
+    .container { max-width: 900px; margin: 0 auto; }
+    
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+    h1 { font-size: 1.25rem; font-weight: 700; color: var(--text); }
+    
+    .month-picker { display: flex; align-items: center; gap: 8px; background: var(--card); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); }
+    
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
+    .tab-btn {
+      padding: 10px 16px; background: none; border: none; color: var(--subtext);
+      font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    
+    .card { background: var(--card); padding: 16px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 16px; }
+    .grid-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .sum-box { background: var(--card); padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+    .sum-title { font-size: 0.8rem; color: var(--subtext); }
+    .sum-val { font-size: 1.2rem; font-weight: bold; margin-top: 4px; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+    th { color: var(--subtext); font-size: 0.8rem; }
+    
+    input[type="text"], input[type="number"] {
+      width: 100%; padding: 8px; background: #0f172a; border: 1px solid var(--border);
+      color: white; border-radius: 6px; font-size: 0.9rem;
+    }
+    
+    button {
+      padding: 8px 14px; background: var(--accent); color: white; border: none;
+      border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s;
+    }
+    button:hover { background: var(--accent-hover); }
+    .btn-danger { background: var(--red); }
+    .btn-sm { padding: 4px 8px; font-size: 0.8rem; }
+    
+    .paid-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: var(--green); }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div class="container" id="app-content">
+    <header>
+      <h1>Controle Financeiro</h1>
+      <div class="month-picker">
+        <button onclick="changeMonth(-1)" class="btn-sm">◀</button>
+        <span id="current-month-display" style="font-weight:bold;">OUT / 2026</span>
+        <button onclick="changeMonth(1)" class="btn-sm">▶</button>
+      </div>
+      <button onclick="resetCurrentMonth()" class="btn-sm btn-danger" title="Restaurar dados originais de Outubro/2026">Restaurar Mês</button>
+    </header>
+
+    <!-- ABAS -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('resumo', event)">Resumo</button>
+      <button class="tab-btn" onclick="showTab('despesas', event)">Despesas</button>
+      <button class="tab-btn" onclick="showTab('rendas', event)">Rendas</button>
+      <button class="tab-btn" onclick="showTab('anual', event)">Visão Anual</button>
+    </div>
+
+    <!-- ABA 1: RESUMO -->
+    <div id="tab-resumo">
+      <div class="grid-summary">
+        <div class="sum-box">
+          <div class="sum-title">Renda Real Total</div>
+          <div class="sum-val" id="sum-renda-real" style="color:var(--green);">R$ 0,00</div>
+        </div>
+        <div class="sum-box">
+          <div class="sum-title">Custo Real Total</div>
+          <div class="sum-val" id="sum-custo-real" style="color:var(--red);">R$ 0,00</div>
+        </div>
+        <div class="sum-box">
+          <div class="sum-title">Total Já Pago</div>
+          <div class="sum-val" id="sum-pago" style="color:var(--green);">R$ 0,00</div>
+        </div>
+        <div class="sum-box">
+          <div class="sum-title">Saldo Real</div>
+          <div class="sum-val" id="sum-saldo-real">R$ 0,00</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Status de Pagamentos do Mês</h3>
+        <p style="font-size:0.9rem; color:var(--subtext); margin-top:8px;" id="status-pagamento-txt">0 de 0 contas pagas</p>
+      </div>
+    </div>
+
+    <!-- ABA 2: DESPESAS -->
+    <div id="tab-despesas" class="hidden">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3>Lista de Despesas</h3>
+          <button onclick="addExpense()" class="btn-sm">+ Nova Despesa</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px;">Pago</th>
+                <th>Item</th>
+                <th>Categoria</th>
+                <th>Estimado (R$)</th>
+                <th>Real (R$)</th>
+                <th style="width:40px;">Ação</th>
+              </tr>
+            </thead>
+            <tbody id="expense-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 3: RENDAS -->
+    <div id="tab-rendas" class="hidden">
+      <div class="card">
+        <h3>Entradas e Rendas</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Fonte</th>
+              <th>Projeção (R$)</th>
+              <th>Real (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Renda 1</td>
+              <td><input type="number" id="r1-proj" step="0.01" oninput="saveData()"></td>
+              <td><input type="number" id="r1-real" step="0.01" oninput="saveData()"></td>
+            </tr>
+            <tr>
+              <td>Renda Extra</td>
+              <td><input type="number" id="re-proj" step="0.01" oninput="saveData()"></td>
+              <td><input type="number" id="re-real" step="0.01" oninput="saveData()"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ABA 4: ANUAL -->
+    <div id="tab-anual" class="hidden">
+      <div class="card">
+        <h3>Histórico Anual (2026)</h3>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Mês</th>
+                <th>Renda Real</th>
+                <th>Custo Real</th>
+                <th>Saldo Real</th>
+              </tr>
+            </thead>
+            <tbody id="annual-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentYear = 2026;
+    let currentMonth = 9; // Outubro
+    const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+    
+    let db = JSON.parse(localStorage.getItem('financas_db_v3')) || {};
+
+    function getBaseOctData() {
+      return {
+        renda1_proj: 7207.33, renda1_real: 6414.52,
+        rendaEx_proj: 0, rendaEx_real: 0,
+        despesas: [
+          { name: "Aluguel", cat: "Moradia", proj: 2160, real: 2160, paid: true },
+          { name: "Cel Claro", cat: "Moradia", proj: 73.90, real: 73.90, paid: true },
+          { name: "Conta de luz", cat: "Moradia", proj: 451.00, real: 453.00, paid: true },
+          { name: "Gás", cat: "Moradia", proj: 140.00, real: 130.00, paid: true },
+          { name: "Internet Maxx", cat: "Moradia", proj: 130.00, real: 119.90, paid: true },
+          { name: "Aluguel Alc", cat: "Moradia", proj: 150.00, real: 150.00, paid: true },
+          { name: "Despesas Alc", cat: "Moradia", proj: 100.00, real: 70.00, paid: true },
+          { name: "Financiam Car", cat: "Transporte", proj: 441.00, real: 441.00, paid: true },
+          { name: "Bus", cat: "Transporte", proj: 80.00, real: 70.00, paid: false },
+          { name: "Uber/99", cat: "Transporte", proj: 100.00, real: 90.00, paid: false },
+          { name: "Supermercado", cat: "Alimentação", proj: 700.00, real: 700.00, paid: true },
+          { name: "Médicos", cat: "Cuidados Pessoais", proj: 300.00, real: 150.00, paid: true },
+          { name: "Academia", cat: "Cuidados Pessoais", proj: 125.00, real: 125.00, paid: true },
+          { name: "Shows", cat: "Entretenimento", proj: 150.00, real: 150.00, paid: true },
+          { name: "Pessoal", cat: "Empréstimos", proj: 140.00, real: 140.00, paid: true },
+          { name: "Cartão Inter", cat: "Empréstimos", proj: 170.00, real: 170.00, paid: true },
+          { name: "Pague leve", cat: "Empréstimos", proj: 325.31, real: 300.00, paid: false },
+          { name: "Henrique", cat: "Empréstimos", proj: 427.74, real: 427.74, paid: true },
+          { name: "Nubank", cat: "Empréstimos", proj: 100.00, real: 97.00, paid: true },
+          { name: "Acordo Itaú", cat: "Empréstimos", proj: 276.55, real: 276.55, paid: true },
+          { name: "RD10", cat: "Empréstimos", proj: 146.00, real: 446.00, paid: true },
+          { name: "Doações", cat: "Doações", proj: 120.00, real: 70.00, paid: true },
+          { name: "LI CASTELL", cat: "Investimentos", proj: 0, real: 0, paid: false }
+        ]
+      };
+    }
+
+    function initMonth(key) {
+      if (!db[key]) {
+        if (key === "2026-9") {
+          db[key] = getBaseOctData();
+        } else {
+          // Copia estrutura do mês anterior se existir, ou cria base vazia/padrão
+          db[key] = {
+            renda1_proj: 7207.33, renda1_real: 0,
+            rendaEx_proj: 0, rendaEx_real: 0,
+            despesas: getBaseOctData().despesas.map(d => ({ ...d, real: d.proj, paid: false }))
+          };
+        }
+      }
+    }
+
+    function resetCurrentMonth() {
+      const key = `${currentYear}-${currentMonth}`;
+      db[key] = getBaseOctData();
+      saveData();
+      loadMonthData();
+    }
+
+    function getMonthKey() {
+      return `${currentYear}-${currentMonth}`;
+    }
+
+    function changeMonth(delta) {
+      currentMonth += delta;
+      if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+      if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+      loadMonthData();
+    }
+
+    function loadMonthData() {
+      const key = getMonthKey();
+      document.getElementById('current-month-display').innerText = `${monthNames[currentMonth]} / ${currentYear}`;
+      initMonth(key);
+      
+      const mData = db[key];
+      document.getElementById('r1-proj').value = mData.renda1_proj ?? 0;
+      document.getElementById('r1-real').value = mData.renda1_real ?? 0;
+      document.getElementById('re-proj').value = mData.rendaEx_proj ?? 0;
+      document.getElementById('re-real').value = mData.rendaEx_real ?? 0;
+
+      renderExpenses();
+      updateSummary();
+      renderAnnual();
+    }
+
+    function renderExpenses() {
+      const key = getMonthKey();
+      const list = db[key].despesas;
+      const tbody = document.getElementById('expense-table-body');
+      tbody.innerHTML = '';
+
+      list.forEach((item, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="text-align:center;"><input type="checkbox" class="paid-checkbox" ${item.paid ? 'checked' : ''} onchange="togglePaid(${idx})"></td>
+          <td><input type="text" value="${item.name}" oninput="updateItem(${idx}, 'name', this.value)"></td>
+          <td><input type="text" value="${item.cat}" oninput="updateItem(${idx}, 'cat', this.value)"></td>
+          <td><input type="number" step="0.01" value="${item.proj}" oninput="updateItem(${idx}, 'proj', this.value)"></td>
+          <td><input type="number" step="0.01" value="${item.real}" oninput="updateItem(${idx}, 'real', this.value)"></td>
+          <td><button onclick="deleteItem(${idx})" class="btn-sm btn-danger">X</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function togglePaid(idx) {
+      const key = getMonthKey();
+      db[key].despesas[idx].paid = !db[key].despesas[idx].paid;
+      saveData();
+    }
+
+    function updateItem(idx, field, val) {
+      const key = getMonthKey();
+      if (field === 'proj' || field === 'real') val = parseFloat(val) || 0;
+      db[key].despesas[idx][field] = val;
+      saveData();
+    }
+
+    function deleteItem(idx) {
+      const key = getMonthKey();
+      db[key].despesas.splice(idx, 1);
+      saveData();
+      renderExpenses();
+    }
+
+    function addExpense() {
+      const key = getMonthKey();
+      db[key].despesas.push({ name: "Nova Conta", cat: "Outros", proj: 0, real: 0, paid: false });
+      saveData();
+      renderExpenses();
+    }
+
+    function saveData() {
+      const key = getMonthKey();
+      db[key].renda1_proj = parseFloat(document.getElementById('r1-proj').value) || 0;
+      db[key].renda1_real = parseFloat(document.getElementById('r1-real').value) || 0;
+      db[key].rendaEx_proj = parseFloat(document.getElementById('re-proj').value) || 0;
+      db[key].rendaEx_real = parseFloat(document.getElementById('re-real').value) || 0;
+
+      localStorage.setItem('financas_db_v3', JSON.stringify(db));
+      updateSummary();
+      renderAnnual();
+    }
+
+    function updateSummary() {
+      const key = getMonthKey();
+      const mData = db[key];
+      const rendaTotal = (mData.renda1_real || 0) + (mData.rendaEx_real || 0);
+      
+      let custoTotal = 0;
+      let totalPago = 0;
+      let contasPagasCount = 0;
+
+      mData.despesas.forEach(item => {
+        custoTotal += (item.real || 0);
+        if (item.paid) {
+          totalPago += (item.real || 0);
+          contasPagasCount++;
+        }
+      });
+
+      const saldoReal = rendaTotal - custoTotal;
+
+      document.getElementById('sum-renda-real').innerText = `R$ ${rendaTotal.toFixed(2)}`;
+      document.getElementById('sum-custo-real').innerText = `R$ ${custoTotal.toFixed(2)}`;
+      document.getElementById('sum-pago').innerText = `R$ ${totalPago.toFixed(2)}`;
+      
+      const saldoEl = document.getElementById('sum-saldo-real');
+      saldoEl.innerText = `R$ ${saldoReal.toFixed(2)}`;
+      saldoEl.style.color = saldoReal >= 0 ? 'var(--green)' : 'var(--red)';
+
+      document.getElementById('status-pagamento-txt').innerText = `${contasPagasCount} de ${mData.despesas.length} contas marcadas como pagas (Total quitado: R$ ${totalPago.toFixed(2)}).`;
+    }
+
+    function renderAnnual() {
+      const tbody = document.getElementById('annual-table-body');
+      tbody.innerHTML = '';
+
+      for (let m = 0; m < 12; m++) {
+        const key = `${currentYear}-${m}`;
+        if (db[key]) {
+          const mData = db[key];
+          const renda = (mData.renda1_real || 0) + (mData.rendaEx_real || 0);
+          let custo = 0;
+          mData.despesas.forEach(i => custo += (i.real || 0));
+          const saldo = renda - custo;
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${monthNames[m]}</strong></td>
+            <td style="color:var(--green)">R$ ${renda.toFixed(2)}</td>
+            <td style="color:var(--red)">R$ ${custo.toFixed(2)}</td>
+            <td style="color:${saldo >= 0 ? 'var(--green)' : 'var(--red)'}">R$ ${saldo.toFixed(2)}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+    }
+
+    function showTab(tabName, evt) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('[id^="tab-"]').forEach(d => d.classList.add('hidden'));
+
+      evt.currentTarget.classList.add('active');
+      document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+    }
+
+    // Inicialização direta
+    loadMonthData();
+  </script>
+</body>
+</html>
