@@ -107,6 +107,7 @@
         <button onclick="changeMonth(1)" class="btn-sm">▶</button>
       </div>
       <button onclick="resetCurrentMonth()" class="btn-sm btn-danger" title="Limpar mês">Limpar Mês</button>
+      <button onclick="copyToNextMonth()" class="btn-sm btn-success" title="Copiar tudo para o mês seguinte">Copiar p/ Próx. Mês ➡️</button>
     </header>
 
     <!-- ABAS -->
@@ -305,7 +306,7 @@
     let annualViewYear = 2026;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_clean_v1')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_clean_v2')) || {};
 
     function getEmptyMonthData() {
       return {
@@ -328,7 +329,6 @@
         if (!db[key].despesas) {
           db[key].despesas = [];
         }
-        // Garante que o Dízimo exista
         if (!db[key].despesas.some(d => d.name.toLowerCase().includes("dízimo"))) {
           db[key].despesas.unshift({ name: "Dízimo", cat: "Doações", proj: 0, real: 0, paid: false });
         }
@@ -341,6 +341,30 @@
         db[key] = getEmptyMonthData();
         saveData();
         loadMonthData();
+      }
+    }
+
+    function copyToNextMonth() {
+      if (confirm("Deseja copiar todas as rendas e despesas deste mês para o mês seguinte?")) {
+        const currentKey = getMonthKey();
+        const currentData = db[currentKey];
+
+        let nextMonth = currentMonth + 1;
+        let nextYear = currentYear;
+        if (nextMonth > 11) {
+          nextMonth = 0;
+          nextYear++;
+        }
+
+        const nextKey = `${nextYear}-${nextMonth}`;
+
+        db[nextKey] = {
+          rendas: JSON.parse(JSON.stringify(currentData.rendas)),
+          despesas: currentData.despesas.map(d => ({ ...d, paid: false }))
+        };
+
+        saveData();
+        alert(`Dados copiados com sucesso para ${monthNames[nextMonth]} / ${nextYear}! Use as setas do mês para lá navegar.`);
       }
     }
 
@@ -401,7 +425,6 @@
         totalReal += (r.real || 0);
       });
 
-      // Atualiza automaticamente o Dízimo para 10% da renda
       db[key].despesas.forEach(d => {
         if (d.name.toLowerCase().includes("dízimo")) {
           d.proj = totalProj * 0.1;
@@ -477,7 +500,7 @@
     }
 
     function saveData() {
-      localStorage.setItem('financas_db_clean_v1', JSON.stringify(db));
+      localStorage.setItem('financas_db_clean_v2', JSON.stringify(db));
       updateSummary();
       renderAnnual();
       drawChart();
@@ -643,7 +666,7 @@
       reader.onload = function(e) {
         try {
           db = JSON.parse(e.target.result);
-          localStorage.setItem('financas_db_clean_v1', JSON.stringify(db));
+          localStorage.setItem('financas_db_clean_v2', JSON.stringify(db));
           loadMonthData();
           alert("Backup importado com sucesso!");
         } catch (err) {
