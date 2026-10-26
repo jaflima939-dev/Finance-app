@@ -45,18 +45,19 @@
     .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
     
     .card { background: var(--card); padding: 16px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 16px; }
-    .grid-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .grid-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
     .sum-box { background: var(--card); padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
     .sum-title { font-size: 0.8rem; color: var(--subtext); }
-    .sum-val { font-size: 1.2rem; font-weight: bold; margin-top: 4px; }
+    .sum-val { font-size: 1.15rem; font-weight: bold; margin-top: 4px; }
     
     table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.9rem; }
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
     th { color: var(--subtext); font-size: 0.8rem; }
+    tfoot td { font-weight: bold; border-top: 2px solid var(--border); background: rgba(255,255,255,0.02); }
     
     input[type="text"], input[type="number"], input[type="password"] {
       width: 100%; padding: 8px; background: #0f172a; border: 1px solid var(--border);
-      color: white; border-radius: 6px; font-size: 0.9rem; margin-top: 4px; margin-bottom: 10px;
+      color: white; border-radius: 6px; font-size: 0.9rem; margin-top: 2px; margin-bottom: 2px;
     }
     
     button {
@@ -119,15 +120,17 @@
     <div id="tab-resumo">
       <div class="grid-summary">
         <div class="sum-box">
-          <div class="sum-title">Renda Real Total</div>
+          <div class="sum-title">Renda Real / Prevista</div>
           <div class="sum-val" id="sum-renda-real" style="color:var(--green);">R$ 0,00</div>
+          <div style="font-size:0.75rem; color:var(--subtext);" id="sum-renda-proj">Prev: R$ 0,00</div>
         </div>
         <div class="sum-box">
-          <div class="sum-title">Custo Real Total</div>
+          <div class="sum-title">Custo Real / Previsto</div>
           <div class="sum-val" id="sum-custo-real" style="color:var(--red);">R$ 0,00</div>
+          <div style="font-size:0.75rem; color:var(--subtext);" id="sum-custo-proj">Prev: R$ 0,00</div>
         </div>
         <div class="sum-box">
-          <div class="sum-title">Total Já Pago</div>
+          <div class="sum-title">Total Já Quitado</div>
           <div class="sum-val" id="sum-pago" style="color:var(--green);">R$ 0,00</div>
         </div>
         <div class="sum-box">
@@ -162,6 +165,14 @@
               </tr>
             </thead>
             <tbody id="expense-table-body"></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3" style="text-align:right;"><strong>TOTAL DO MÊS:</strong></td>
+                <td id="total-expense-proj" style="color:var(--yellow);">R$ 0,00</td>
+                <td id="total-expense-real" style="color:var(--red);">R$ 0,00</td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
@@ -191,6 +202,13 @@
               <td><input type="number" id="re-real" step="0.01" oninput="saveData()"></td>
             </tr>
           </tbody>
+          <tfoot>
+            <tr>
+              <td style="text-align:right;"><strong>TOTAL RENDAS:</strong></td>
+              <td id="total-renda-proj" style="color:var(--yellow);">R$ 0,00</td>
+              <td id="total-renda-real" style="color:var(--green);">R$ 0,00</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -239,7 +257,6 @@
   </div>
 
   <script>
-    // Gestão de Senha Segura Local
     let appPassword = localStorage.getItem('financas_pass') || "123";
 
     function unlockApp() {
@@ -276,7 +293,7 @@
     let currentMonth = 9;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_v6')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_v7')) || {};
 
     function getBaseOctData() {
       return {
@@ -344,226 +361,4 @@
 
     function loadMonthData() {
       const key = getMonthKey();
-      document.getElementById('current-month-display').innerText = `${monthNames[currentMonth]} / ${currentYear}`;
-      initMonth(key);
-      
-      const mData = db[key];
-      document.getElementById('r1-proj').value = mData.renda1_proj ?? 0;
-      document.getElementById('r1-real').value = mData.renda1_real ?? 0;
-      document.getElementById('re-proj').value = mData.rendaEx_proj ?? 0;
-      document.getElementById('re-real').value = mData.rendaEx_real ?? 0;
-
-      renderExpenses();
-      updateSummary();
-      renderAnnual();
-      drawChart();
-    }
-
-    function renderExpenses() {
-      const key = getMonthKey();
-      const list = db[key].despesas;
-      const tbody = document.getElementById('expense-table-body');
-      tbody.innerHTML = '';
-
-      list.forEach((item, idx) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td style="text-align:center;"><input type="checkbox" class="paid-checkbox" ${item.paid ? 'checked' : ''} onchange="togglePaid(${idx})"></td>
-          <td><input type="text" value="${item.name}" oninput="updateItem(${idx}, 'name', this.value)"></td>
-          <td><input type="text" value="${item.cat}" oninput="updateItem(${idx}, 'cat', this.value)"></td>
-          <td><input type="number" step="0.01" value="${item.proj}" oninput="updateItem(${idx}, 'proj', this.value)"></td>
-          <td><input type="number" step="0.01" value="${item.real}" oninput="updateItem(${idx}, 'real', this.value)"></td>
-          <td><button onclick="deleteItem(${idx})" class="btn-sm btn-danger">X</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    function togglePaid(idx) {
-      const key = getMonthKey();
-      db[key].despesas[idx].paid = !db[key].despesas[idx].paid;
-      saveData();
-    }
-
-    function updateItem(idx, field, val) {
-      const key = getMonthKey();
-      if (field === 'proj' || field === 'real') val = parseFloat(val) || 0;
-      db[key].despesas[idx][field] = val;
-      saveData();
-    }
-
-    function deleteItem(idx) {
-      const key = getMonthKey();
-      db[key].despesas.splice(idx, 1);
-      saveData();
-      renderExpenses();
-    }
-
-    function addExpense() {
-      const key = getMonthKey();
-      db[key].despesas.push({ name: "Nova Conta", cat: "Outros", proj: 0, real: 0, paid: false });
-      saveData();
-      renderExpenses();
-    }
-
-    function saveData() {
-      const key = getMonthKey();
-      db[key].renda1_proj = parseFloat(document.getElementById('r1-proj').value) || 0;
-      db[key].renda1_real = parseFloat(document.getElementById('r1-real').value) || 0;
-      db[key].rendaEx_proj = parseFloat(document.getElementById('re-proj').value) || 0;
-      db[key].rendaEx_real = parseFloat(document.getElementById('re-real').value) || 0;
-
-      localStorage.setItem('financas_db_v6', JSON.stringify(db));
-      updateSummary();
-      renderAnnual();
-      drawChart();
-    }
-
-    function updateSummary() {
-      const key = getMonthKey();
-      const mData = db[key];
-      const rendaTotal = (mData.renda1_real || 0) + (mData.rendaEx_real || 0);
-      
-      let custoTotal = 0;
-      let totalPago = 0;
-      let contasPagasCount = 0;
-
-      mData.despesas.forEach(item => {
-        custoTotal += (item.real || 0);
-        if (item.paid) {
-          totalPago += (item.real || 0);
-          contasPagasCount++;
-        }
-      });
-
-      const saldoReal = rendaTotal - custoTotal;
-
-      document.getElementById('sum-renda-real').innerText = `R$ ${rendaTotal.toFixed(2)}`;
-      document.getElementById('sum-custo-real').innerText = `R$ ${custoTotal.toFixed(2)}`;
-      document.getElementById('sum-pago').innerText = `R$ ${totalPago.toFixed(2)}`;
-      
-      const saldoEl = document.getElementById('sum-saldo-real');
-      saldoEl.innerText = `R$ ${saldoReal.toFixed(2)}`;
-      saldoEl.style.color = saldoReal >= 0 ? 'var(--green)' : 'var(--red)';
-
-      document.getElementById('status-pagamento-txt').innerText = `${contasPagasCount} de ${mData.despesas.length} contas marcadas como pagas (Total quitado: R$ ${totalPago.toFixed(2)}).`;
-    }
-
-    function renderAnnual() {
-      const tbody = document.getElementById('annual-table-body');
-      tbody.innerHTML = '';
-
-      for (let m = 0; m < 12; m++) {
-        const key = `${currentYear}-${m}`;
-        if (db[key]) {
-          const mData = db[key];
-          const renda = (mData.renda1_real || 0) + (mData.rendaEx_real || 0);
-          let custo = 0;
-          mData.despesas.forEach(i => custo += (i.real || 0));
-          const saldo = renda - custo;
-
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><strong>${monthNames[m]}</strong></td>
-            <td style="color:var(--green)">R$ ${renda.toFixed(2)}</td>
-            <td style="color:var(--red)">R$ ${custo.toFixed(2)}</td>
-            <td style="color:${saldo >= 0 ? 'var(--green)' : 'var(--red)'}">R$ ${saldo.toFixed(2)}</td>
-          `;
-          tbody.appendChild(tr);
-        }
-      }
-    }
-
-    function drawChart() {
-      const canvas = document.getElementById('categoryChart');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const key = getMonthKey();
-      const mData = db[key];
-      const cats = {};
-      mData.despesas.forEach(i => {
-        cats[i.cat] = (cats[i.cat] || 0) + (i.real || 0);
-      });
-
-      const labels = Object.keys(cats);
-      const data = Object.values(cats);
-      const total = data.reduce((a, b) => a + b, 0);
-
-      if (total === 0) {
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = "14px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("Sem dados para exibir no gráfico", canvas.width / 2, canvas.height / 2);
-        return;
-      }
-
-      let startAngle = 0;
-      const colors = ["#0284c7", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"];
-      const centerX = 110, centerY = 110, radius = 80;
-
-      labels.exports = labels.forEach((label, idx) => {
-        const sliceAngle = (data[idx] / total) * 2 * Math.PI;
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
-        ctx.closePath();
-        ctx.fillStyle = colors[idx % colors.length];
-        ctx.fill();
-        startAngle += sliceAngle;
-      });
-
-      let legendX = 210, legendY = 40;
-      labels.forEach((label, idx) => {
-        ctx.fillStyle = colors[idx % colors.length];
-        ctx.fillRect(legendX, legendY, 12, 12);
-        ctx.fillStyle = "#f8fafc";
-        ctx.font = "11px sans-serif";
-        ctx.textAlign = "left";
-        const pct = ((data[idx] / total) * 100).toFixed(1);
-        ctx.fillText(`${label} (${pct}%)`, legendX + 18, legendY + 10);
-        legendY += 20;
-      });
-    }
-
-    function exportData() {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
-      const dlAnchorElem = document.createElement('a');
-      dlAnchorElem.setAttribute("href", dataStr);
-      dlAnchorElem.setAttribute("download", `financas_backup_${currentYear}_${currentMonth + 1}.json`);
-      dlAnchorElem.click();
-    }
-
-    function importDataTrigger() {
-      document.getElementById('import-file').click();
-    }
-
-    function importData(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          db = JSON.parse(e.target.result);
-          localStorage.setItem('financas_db_v6', JSON.stringify(db));
-          loadMonthData();
-          alert("Backup importado com sucesso!");
-        } catch (err) {
-          alert("Erro ao ler o arquivo de backup.");
-        }
-      };
-      reader.readAsText(file);
-    }
-
-    function showTab(tabName, evt) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('[id^="tab-"]').forEach(d => d.classList.add('hidden'));
-
-      evt.currentTarget.classList.add('active');
-      document.getElementById(`tab-${tabName}`).classList.remove('hidden');
-      if (tabName === 'graficos') drawChart();
-    }
-  </script>
-</body>
-</html>
+      document.getElementById('current-month-display').innerText =
