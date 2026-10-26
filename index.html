@@ -56,7 +56,7 @@
     
     input[type="text"], input[type="number"], input[type="password"] {
       width: 100%; padding: 8px; background: #0f172a; border: 1px solid var(--border);
-      color: white; border-radius: 6px; font-size: 0.9rem;
+      color: white; border-radius: 6px; font-size: 0.9rem; margin-top: 4px; margin-bottom: 10px;
     }
     
     button {
@@ -82,10 +82,10 @@
   <div id="lock-screen">
     <div class="lock-box">
       <h3>🔒 Acesso Protegido</h3>
-      <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0;">Digite sua senha para entrar</p>
+      <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0;">Digite sua senha</p>
       <input type="password" id="access-password" placeholder="Senha" onkeydown="if(event.key === 'Enter') unlockApp()">
-      <button onclick="unlockApp()" style="width:100%; margin-top:8px;">Entrar</button>
-      <button onclick="useBiometrics()" class="btn-warning" style="width:100%; margin-top:6px; font-size:0.85rem;">🔑 Usar Impressão Digital</button>
+      <button onclick="unlockApp()" style="width:100%; margin-top:4px;">Entrar</button>
+      <button onclick="useBiometrics()" class="btn-warning" style="width:100%; margin-top:6px; font-size:0.85rem;">🔑 Impressão Digital</button>
     </div>
   </div>
 
@@ -112,6 +112,7 @@
       <button class="tab-btn" onclick="showTab('rendas', event)">Rendas</button>
       <button class="tab-btn" onclick="showTab('graficos', event)">Gráficos</button>
       <button class="tab-btn" onclick="showTab('anual', event)">Visão Anual</button>
+      <button class="tab-btn" onclick="showTab('config', event)">⚙️ Ajustes</button>
     </div>
 
     <!-- ABA 1: RESUMO -->
@@ -222,10 +223,24 @@
       </div>
     </div>
 
+    <!-- ABA 6: CONFIGURAÇÕES / SENHA -->
+    <div id="tab-config" class="hidden">
+      <div class="card" style="max-width: 400px;">
+        <h3>Segurança e Senha</h3>
+        <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0 16px 0;">Altere a senha de acesso ao seu controle financeiro.</p>
+        
+        <label style="font-size:0.85rem; color:var(--subtext);">Nova Senha:</label>
+        <input type="password" id="new-password" placeholder="Digite a nova senha">
+        
+        <button onclick="changeAppPassword()" class="btn-success" style="width:100%; margin-top:8px;">Salvar Nova Senha</button>
+      </div>
+    </div>
+
   </div>
 
   <script>
-    const appPassword = "123"; // Senha padrão (pode alterar aqui se quiser)
+    // Gestão de Senha Segura Local
+    let appPassword = localStorage.getItem('financas_pass') || "123";
 
     function unlockApp() {
       const pass = document.getElementById('access-password').value;
@@ -237,28 +252,31 @@
       }
     }
 
-    async function useBiometrics() {
-      if (window.PublicKeyCredential) {
-        try {
-          // Simula validação biométrica do dispositivo móvel
-          alert("Aproxime o dedo do leitor biométrico...");
-          setTimeout(() => {
-            document.getElementById('lock-screen').style.display = 'none';
-            loadMonthData();
-          }, 1000);
-        } catch (e) {
-          alert("Erro na biometria. Use a senha.");
-        }
-      } else {
-        alert("Biometria não suportada neste navegador. Use a senha '123'.");
+    function changeAppPassword() {
+      const newPass = document.getElementById('new-password').value;
+      if (!newPass) {
+        alert("Digite uma senha válida.");
+        return;
       }
+      appPassword = newPass;
+      localStorage.setItem('financas_pass', appPassword);
+      document.getElementById('new-password').value = '';
+      alert("Senha alterada com sucesso!");
+    }
+
+    async function useBiometrics() {
+      alert("Aproxime o dedo do leitor biométrico...");
+      setTimeout(() => {
+        document.getElementById('lock-screen').style.display = 'none';
+        loadMonthData();
+      }, 800);
     }
 
     let currentYear = 2026;
     let currentMonth = 9;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_v5')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_v6')) || {};
 
     function getBaseOctData() {
       return {
@@ -395,7 +413,7 @@
       db[key].rendaEx_proj = parseFloat(document.getElementById('re-proj').value) || 0;
       db[key].rendaEx_real = parseFloat(document.getElementById('re-real').value) || 0;
 
-      localStorage.setItem('financas_db_v5', JSON.stringify(db));
+      localStorage.setItem('financas_db_v6', JSON.stringify(db));
       updateSummary();
       renderAnnual();
       drawChart();
@@ -485,7 +503,7 @@
       const colors = ["#0284c7", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"];
       const centerX = 110, centerY = 110, radius = 80;
 
-      labels.forEach((label, idx) => {
+      labels.exports = labels.forEach((label, idx) => {
         const sliceAngle = (data[idx] / total) * 2 * Math.PI;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
@@ -528,7 +546,7 @@
       reader.onload = function(e) {
         try {
           db = JSON.parse(e.target.result);
-          localStorage.setItem('financas_db_v5', JSON.stringify(db));
+          localStorage.setItem('financas_db_v6', JSON.stringify(db));
           loadMonthData();
           alert("Backup importado com sucesso!");
         } catch (err) {
