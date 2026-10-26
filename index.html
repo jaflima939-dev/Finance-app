@@ -25,7 +25,7 @@
     
     /* TELA DE BLOQUEIO */
     #lock-screen {
-      position: fixed; inset: 0; background: var(--bg); z-index: 999;
+      position: fixed; inset: 0; background: var(--bg); z-index: 9999;
       display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;
     }
     .lock-box { background: var(--card); padding: 24px; border-radius: 12px; border: 1px solid var(--border); width: 100%; max-width: 320px; }
@@ -79,18 +79,17 @@
 </head>
 <body>
 
-  <!-- TELA DE SENHA -->
+  <!-- TELA DE SENHA CORRIGIDA -->
   <div id="lock-screen">
     <div class="lock-box">
       <h3>🔒 Acesso Protegido</h3>
       <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0;">Digite sua senha (padrão: 123)</p>
-      <input type="password" id="access-password" placeholder="Senha" onkeydown="if(event.key === 'Enter') unlockApp()">
-      <button onclick="unlockApp()" style="width:100%; margin-top:4px;">Entrar</button>
-      <button onclick="useBiometrics()" class="btn-warning" style="width:100%; margin-top:6px; font-size:0.85rem;">🔑 Impressão Digital</button>
+      <input type="password" id="access-password" placeholder="Senha" autofocus>
+      <button id="btn-unlock" style="width:100%; margin-top:4px;">Entrar</button>
     </div>
   </div>
 
-  <div class="container" id="app-content">
+  <div class="container">
     <header>
       <h1>Controle Financeiro</h1>
       <div class="header-actions">
@@ -257,15 +256,22 @@
   </div>
 
   <script>
-    let appPassword = localStorage.getItem('financas_pass') || "123";
+    // Lógica de Autenticação Robusta e Direta
+    document.getElementById('btn-unlock').addEventListener('click', processLogin);
+    document.getElementById('access-password').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') processLogin();
+    });
 
-    function unlockApp() {
-      const pass = document.getElementById('access-password').value;
-      if (pass === appPassword) {
+    function processLogin() {
+      const inputPass = document.getElementById('access-password').value;
+      const savedPass = localStorage.getItem('financas_pass') || "123";
+
+      if (inputPass === savedPass) {
         document.getElementById('lock-screen').style.display = 'none';
         loadMonthData();
       } else {
-        alert("Senha incorreta!");
+        alert("Senha incorreta! Use 123");
+        document.getElementById('access-password').value = '';
       }
     }
 
@@ -275,25 +281,16 @@
         alert("Digite uma senha válida.");
         return;
       }
-      appPassword = newPass;
-      localStorage.setItem('financas_pass', appPassword);
+      localStorage.setItem('financas_pass', newPass);
       document.getElementById('new-password').value = '';
       alert("Senha alterada com sucesso!");
-    }
-
-    async function useBiometrics() {
-      alert("Aproxime o dedo do leitor biométrico...");
-      setTimeout(() => {
-        document.getElementById('lock-screen').style.display = 'none';
-        loadMonthData();
-      }, 800);
     }
 
     let currentYear = 2026;
     let currentMonth = 9;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_v9')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_v10')) || {};
 
     function getBaseOctData() {
       return {
@@ -430,7 +427,7 @@
       db[key].rendaEx_proj = parseFloat(document.getElementById('re-proj').value) || 0;
       db[key].rendaEx_real = parseFloat(document.getElementById('re-real').value) || 0;
 
-      localStorage.setItem('financas_db_v9', JSON.stringify(db));
+      localStorage.setItem('financas_db_v10', JSON.stringify(db));
       updateSummary();
       renderAnnual();
       drawChart();
@@ -549,4 +546,51 @@
         ctx.fillStyle = colors[idx % colors.length];
         ctx.fillRect(legendX, legendY, 12, 12);
         ctx.fillStyle = "#f8fafc";
-        ctx.font = "1
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "left";
+        const pct = ((data[idx] / total) * 100).toFixed(1);
+        ctx.fillText(`${label} (${pct}%)`, legendX + 18, legendY + 10);
+        legendY += 20;
+      });
+    }
+
+    function exportData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+      const dlAnchorElem = document.createElement('a');
+      dlAnchorElem.setAttribute("href", dataStr);
+      dlAnchorElem.setAttribute("download", `financas_backup_${currentYear}_${currentMonth + 1}.json`);
+      dlAnchorElem.click();
+    }
+
+    function importDataTrigger() {
+      document.getElementById('import-file').click();
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          db = JSON.parse(e.target.result);
+          localStorage.setItem('financas_db_v10', JSON.stringify(db));
+          loadMonthData();
+          alert("Backup importado com sucesso!");
+        } catch (err) {
+          alert("Erro ao ler o arquivo de backup.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function showTab(tabName, evt) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('[id^="tab-"]').forEach(d => d.classList.add('hidden'));
+
+      evt.currentTarget.classList.add('active');
+      document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+      if (tabName === 'graficos') drawChart();
+    }
+  </script>
+</body>
+</html>
