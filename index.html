@@ -79,7 +79,7 @@
 </head>
 <body>
 
-  <!-- TELA DE SENHA CORRIGIDA -->
+  <!-- TELA DE SENHA -->
   <div id="lock-screen">
     <div class="lock-box">
       <h3>🔒 Acesso Protegido</h3>
@@ -285,7 +285,7 @@
     let currentMonth = 9;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_v11')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_v12')) || {};
 
     function getBaseOctData() {
       return {
@@ -293,6 +293,7 @@
           { name: "Renda 1", proj: 7207.33, real: 6414.52 }
         ],
         despesas: [
+          { name: "Dízimo", cat: "Doações", proj: 720.73, real: 641.45, paid: true },
           { name: "Aluguel", cat: "Moradia", proj: 2160, real: 2160, paid: true },
           { name: "Cel Claro", cat: "Moradia", proj: 73.90, real: 73.90, paid: true },
           { name: "Conta de luz", cat: "Moradia", proj: 451.00, real: 453.00, paid: true },
@@ -327,18 +328,23 @@
         } else {
           db[key] = {
             rendas: [{ name: "Renda 1", proj: 7207.33, real: 0 }],
-            despesas: getBaseOctData().despesas.map(d => ({ ...d, real: d.proj, paid: false }))
+            despesas: [
+              { name: "Dízimo", cat: "Doações", proj: 720.73, real: 0, paid: false },
+              ...getBaseOctData().despesas.filter(d => d.name !== "Dízimo").map(d => ({ ...d, real: d.proj, paid: false }))
+            ]
           };
         }
       } else {
-        // Compatibilidade com estruturas antigas que usavam campos fixos
         if (!db[key].rendas) {
           db[key].rendas = [
             { name: "Renda 1", proj: db[key].renda1_proj || 0, real: db[key].renda1_real || 0 }
           ];
-          if ((db[key].rendaEx_proj || 0) > 0 || (db[key].rendaEx_real || 0) > 0) {
-            db[key].rendas.push({ name: "Renda Extra", proj: db[key].rendaEx_proj || 0, real: db[key].rendaEx_real || 0 });
-          }
+        }
+        // Garante que o Dízimo exista nas despesas
+        if (!db[key].despesas.some(d => d.name.toLowerCase().includes("dízimo"))) {
+          let totalRendaProj = 0;
+          db[key].rendas.forEach(r => totalRendaProj += (r.proj || 0));
+          db[key].despesas.unshift({ name: "Dízimo", cat: "Doações", proj: totalRendaProj * 0.1, real: 0, paid: false });
         }
       }
     }
@@ -395,7 +401,23 @@
       const key = getMonthKey();
       if (field === 'proj' || field === 'real') val = parseFloat(val) || 0;
       db[key].rendas[idx][field] = val;
+
+      // Atualiza automaticamente o valor do Dízimo se for alterado na projeção/real
+      let totalProj = 0, totalReal = 0;
+      db[key].rendas.forEach(r => {
+        totalProj += (r.proj || 0);
+        totalReal += (r.real || 0);
+      });
+
+      db[key].despesas.forEach(d => {
+        if (d.name.toLowerCase().includes("dízimo")) {
+          d.proj = totalProj * 0.1;
+          d.real = totalReal * 0.1;
+        }
+      });
+
       saveData();
+      renderExpenses();
     }
 
     function addIncome() {
@@ -462,7 +484,7 @@
     }
 
     function saveData() {
-      localStorage.setItem('financas_db_v11', JSON.stringify(db));
+      localStorage.setItem('financas_db_v12', JSON.stringify(db));
       updateSummary();
       renderAnnual();
       drawChart();
@@ -609,18 +631,18 @@
     function importData(event) {
       const file = event.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e) {
+      constReader = new FileReader();
+      constReader.onload = function(e) {
         try {
           db = JSON.parse(e.target.result);
-          localStorage.setItem('financas_db_v11', JSON.stringify(db));
+          localStorage.setItem('financas_db_v12', JSON.stringify(db));
           loadMonthData();
           alert("Backup importado com sucesso!");
         } catch (err) {
           alert("Erro ao ler o arquivo de backup.");
         }
       };
-      reader.readAsText(file);
+      constReader.readAsText(file);
     }
 
     function showTab(tabName, evt) {
