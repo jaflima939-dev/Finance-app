@@ -22,14 +22,6 @@
     body { background-color: var(--bg); color: var(--text); min-height: 100vh; padding: 12px; }
     
     .container { max-width: 900px; margin: 0 auto; }
-    
-    /* TELA DE BLOQUEIO */
-    #lock-screen {
-      position: fixed; inset: 0; background: var(--bg); z-index: 9999;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;
-    }
-    .lock-box { background: var(--card); padding: 24px; border-radius: 12px; border: 1px solid var(--border); width: 100%; max-width: 320px; }
-    .lock-box input { margin: 12px 0; text-align: center; font-size: 1.2rem; letter-spacing: 4px; }
 
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
     h1 { font-size: 1.25rem; font-weight: 700; color: var(--text); }
@@ -73,21 +65,15 @@
     .paid-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: var(--green); }
     .hidden { display: none !important; }
 
-    .chart-container { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
+    .chart-container { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; margin-top: 12px; width: 100%; }
     canvas { background: #0f172a; border-radius: 8px; border: 1px solid var(--border); max-width: 100%; }
+    
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: 100%; margin-top: 10px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; background: rgba(255,255,255,0.03); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); }
+    .legend-color { width: 10px; height: 10px; border-radius: 2px; }
   </style>
 </head>
 <body>
-
-  <!-- TELA DE SENHA -->
-  <div id="lock-screen">
-    <div class="lock-box">
-      <h3>🔒 Acesso Protegido</h3>
-      <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0;">Digite sua senha (padrão: 123)</p>
-      <input type="password" id="access-password" placeholder="Senha" autofocus>
-      <button id="btn-unlock" style="width:100%; margin-top:4px;">Entrar</button>
-    </div>
-  </div>
 
   <div class="container">
     <header>
@@ -212,7 +198,8 @@
     <div id="tab-graficos" class="hidden">
       <div class="card chart-container">
         <h3>Distribuição de Despesas por Categoria</h3>
-        <canvas id="categoryChart" width="320" height="220"></canvas>
+        <canvas id="categoryChart" width="300" height="300"></canvas>
+        <div id="chart-legend-box" class="chart-legend"></div>
       </div>
     </div>
 
@@ -236,56 +223,22 @@
       </div>
     </div>
 
-    <!-- ABA 6: CONFIGURAÇÕES / SENHA -->
+    <!-- ABA 6: CONFIGURAÇÕES -->
     <div id="tab-config" class="hidden">
       <div class="card" style="max-width: 400px;">
-        <h3>Segurança e Senha</h3>
-        <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0 16px 0;">Altere a senha de acesso ao seu controle financeiro diretamente por aqui.</p>
-        
-        <label style="font-size:0.85rem; color:var(--subtext);">Nova Senha:</label>
-        <input type="password" id="new-password" placeholder="Digite a nova senha">
-        
-        <button onclick="changeAppPassword()" class="btn-success" style="width:100%; margin-top:8px;">Salvar Nova Senha</button>
+        <h3>Configurações</h3>
+        <p style="font-size:0.85rem; color:var(--subtext); margin: 8px 0 16px 0;">Aplicativo desbloqueado com sucesso.</p>
       </div>
     </div>
 
   </div>
 
   <script>
-    document.getElementById('btn-unlock').addEventListener('click', processLogin);
-    document.getElementById('access-password').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') processLogin();
-    });
-
-    function processLogin() {
-      const inputPass = document.getElementById('access-password').value;
-      const savedPass = localStorage.getItem('financas_pass') || "123";
-
-      if (inputPass === savedPass) {
-        document.getElementById('lock-screen').style.display = 'none';
-        loadMonthData();
-      } else {
-        alert("Senha incorreta! Use 123");
-        document.getElementById('access-password').value = '';
-      }
-    }
-
-    function changeAppPassword() {
-      const newPass = document.getElementById('new-password').value;
-      if (!newPass) {
-        alert("Digite uma senha válida.");
-        return;
-      }
-      localStorage.setItem('financas_pass', newPass);
-      document.getElementById('new-password').value = '';
-      alert("Senha alterada com sucesso!");
-    }
-
     let currentYear = 2026;
     let currentMonth = 9;
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     
-    let db = JSON.parse(localStorage.getItem('financas_db_v12')) || {};
+    let db = JSON.parse(localStorage.getItem('financas_db_v15')) || {};
 
     function getBaseOctData() {
       return {
@@ -340,7 +293,6 @@
             { name: "Renda 1", proj: db[key].renda1_proj || 0, real: db[key].renda1_real || 0 }
           ];
         }
-        // Garante que o Dízimo exista nas despesas
         if (!db[key].despesas.some(d => d.name.toLowerCase().includes("dízimo"))) {
           let totalRendaProj = 0;
           db[key].rendas.forEach(r => totalRendaProj += (r.proj || 0));
@@ -402,7 +354,6 @@
       if (field === 'proj' || field === 'real') val = parseFloat(val) || 0;
       db[key].rendas[idx][field] = val;
 
-      // Atualiza automaticamente o valor do Dízimo se for alterado na projeção/real
       let totalProj = 0, totalReal = 0;
       db[key].rendas.forEach(r => {
         totalProj += (r.proj || 0);
@@ -484,7 +435,7 @@
     }
 
     function saveData() {
-      localStorage.setItem('financas_db_v12', JSON.stringify(db));
+      localStorage.setItem('financas_db_v15', JSON.stringify(db));
       updateSummary();
       renderAnnual();
       drawChart();
@@ -580,6 +531,9 @@
       const data = Object.values(cats);
       const total = data.reduce((a, b) => a + b, 0);
 
+      const legendBox = document.getElementById('chart-legend-box');
+      legendBox.innerHTML = '';
+
       if (total === 0) {
         ctx.fillStyle = "#94a3b8";
         ctx.font = "14px sans-serif";
@@ -589,8 +543,8 @@
       }
 
       let startAngle = 0;
-      const colors = ["#0284c7", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"];
-      const centerX = 110, centerY = 110, radius = 80;
+      const colors = ["#0284c7", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b", "#38bdf8", "#34d399"];
+      const centerX = canvas.width / 2, centerY = canvas.height / 2, radius = 95;
 
       labels.forEach((label, idx) => {
         const sliceAngle = (data[idx] / total) * 2 * Math.PI;
@@ -601,18 +555,15 @@
         ctx.fillStyle = colors[idx % colors.length];
         ctx.fill();
         startAngle += sliceAngle;
-      });
 
-      let legendX = 210, legendY = 40;
-      labels.forEach((label, idx) => {
-        ctx.fillStyle = colors[idx % colors.length];
-        ctx.fillRect(legendX, legendY, 12, 12);
-        ctx.fillStyle = "#f8fafc";
-        ctx.font = "11px sans-serif";
-        ctx.textAlign = "left";
         const pct = ((data[idx] / total) * 100).toFixed(1);
-        ctx.fillText(`${label} (${pct}%)`, legendX + 18, legendY + 10);
-        legendY += 20;
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `
+          <div class="legend-color" style="background:${colors[idx % colors.length]}"></div>
+          <span>${label}: <strong>${pct}%</strong></span>
+        `;
+        legendBox.appendChild(item);
       });
     }
 
@@ -631,18 +582,18 @@
     function importData(event) {
       const file = event.target.files[0];
       if (!file) return;
-      constReader = new FileReader();
-      constReader.onload = function(e) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
         try {
           db = JSON.parse(e.target.result);
-          localStorage.setItem('financas_db_v12', JSON.stringify(db));
+          localStorage.setItem('financas_db_v15', JSON.stringify(db));
           loadMonthData();
           alert("Backup importado com sucesso!");
         } catch (err) {
           alert("Erro ao ler o arquivo de backup.");
         }
       };
-      constReader.readAsText(file);
+      reader.readAsText(file);
     }
 
     function showTab(tabName, evt) {
@@ -653,6 +604,9 @@
       document.getElementById(`tab-${tabName}`).classList.remove('hidden');
       if (tabName === 'graficos') drawChart();
     }
+
+    // Executa imediatamente ao carregar
+    loadMonthData();
   </script>
 </body>
 </html>
