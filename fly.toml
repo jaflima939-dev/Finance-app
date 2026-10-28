@@ -4,7 +4,7 @@
 #
 
 app = 'finance-app-tsvabq'
-primary_region = 'ams'
+primary_region = 'gru'
 
 [build]
 
