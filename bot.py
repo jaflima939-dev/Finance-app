@@ -8,6 +8,12 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
 from google import genai
 
+# Dependências para geração de PDF
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
 # ================= CONFIGURAÇÕES =================
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "9021554152:AAEMyuoimiq1ljdtvNhFnjKmIiXL0vek7-Q")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6IVZJ0CchReLGLCbTFiHX-KFHbpGsQj8ueQtuHHZa6waA")
@@ -15,6 +21,19 @@ MEU_TELEGRAM_ID = 6159661624
 
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# Mapas de emojis para tornar as respostas e categorias visuais
+EMOJIS_CATEGORIAS = {
+    "Alimentação": "🍔",
+    "Transporte": "🚗",
+    "Lazer": "🎉",
+    "Saúde": "🏥",
+    "Moradia": "🏠",
+    "Educação": "📚",
+    "Investimentos": "📊",
+    "Salário": "💼",
+    "Outros": "📦"
+}
 
 # ================= BANCO DE DADOS =================
 def init_db():
@@ -72,6 +91,18 @@ def obter_resumo_mes():
             
     return resumo, categorias
 
+def obter_todas_transacoes_mes():
+    conn = sqlite3.connect("financas.db")
+    cursor = conn.cursor()
+    mes_atual = datetime.now().strftime("%Y-%m")
+    cursor.execute('''
+        SELECT data_hora, tipo, descricao, valor, categoria, forma_pagamento 
+        FROM transacoes WHERE data_hora LIKE ? ORDER BY data_hora DESC
+    ''', (f"{mes_atual}%",))
+    linhas = cursor.fetchall()
+    conn.close()
+    return linhas
+
 def apagar_ultimo_registo():
     conn = sqlite3.connect("financas.db")
     cursor = conn.cursor()
@@ -85,15 +116,103 @@ def apagar_ultimo_registo():
     conn.close()
     return None
 
+# ================= GERADOR DE PDF =================
+def gerar_pdf_relatorio(nome_arquivo="relatorio_financeiro.pdf"):
+    resumo, categorias = obter_resumo_mes()
+    transacoes = obter_todas_transacoes_mes()
+    mes_nome = datetime.now().strftime("%m/%Y")
+
+    doc = SimpleDocTemplate(
+        nome_arquivo,
+        pagesize=letter,
+        rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
+    )
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Heading1'],
+        fontSize=20,
+        textColor=colors.HexColor('#1E293B'),
+        spaceAfter=12
+    )
+    
+    sub_style = ParagraphStyle(
+        'SubStyle',
+        parent=styles['Normal'],
+        fontSize=11,
+        textColor=colors.HexColor('#64748B'),
+        spaceAfter=20
+    )
+
+    story = []
+    story.append(Paragraph(f"Relatório Financeiro — {mes_nome}", title_style))
+    story.append(Paragraph(f"Gerado automaticamente pelo Assistente Financeiro", sub_style))
+
+    # Tabela Resumo
+    total_rec = resumo["Receita"]
+    total_desp = resumo["Despesa"]
+    saldo = total_rec - total_desp
+
+    data_resumo = [
+        ["Entradas Totais", f"R$ {total_rec:.2f}"],
+        ["Saídas Totais", f"R$ {total_desp:.2f}"],
+        ["Saldo do Mês", f"R$ {saldo:.2f}"]
+    ]
+    
+    t_resumo = Table(data_resumo, colWidths=[250, 250])
+    t_resumo.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#0F172A')),
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('TOPPADDING', (0,0), (-1,-1), 8),
+        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+    ]))
+    story.append(t_resumo)
+    story.append(Spacer(1, 20))
+
+    # Tabela de Extrato de Transações
+    story.append(Paragraph("<b>Extrato Detalhado do Mês:</b>", styles['Heading2']))
+    story.append(Spacer(1, 10))
+
+    data_trans = [["Data/Hora", "Tipo", "Descrição", "Categoria", "Pgto", "Valor (R$)"]]
+    for t in transacoes:
+        data_f = datetime.strptime(t[0], "%Y-%m-%d %H:%M:%S").strftime("%d/%m %H:%M")
+        sinal = "+" if t[1].lower() == "receita" else "-"
+        data_trans.append([
+            data_f,
+            t[1],
+            t[2][:20], # Limita descrição
+            t[4],
+            t[5],
+            f"{sinal} {t[3]:.2f}"
+        ])
+
+    t_extrato = Table(data_trans, colWidths=[80, 65, 130, 85, 75, 65])
+    t_extrato.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0F172A')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+        ('ALIGN', (5,0), (5,-1), 'RIGHT'),
+    ]))
+    story.append(t_extrato)
+
+    doc.build(story)
+    return nome_arquivo
+
 # ================= BACKUP LOCAL INTELIGENTE (SEM IA) =================
 def extrair_dados_localmente(texto):
-    # Procura por números no texto (ex: 45, 45.50, 1.200,50)
     texto_limpo = texto.replace(',', '.')
     numeros = re.findall(r'\d+(?:\.\d+)?', texto_limpo)
     
     valor = 0.0
     if numeros:
-        # Pega o maior número ou o primeiro relevante
         valor = float(numeros[-1])
         
     tipo = "Receita" if any(palavra in texto.lower() for palavra in ["recebi", "ganhei", "salário", "entrada", "pix recebido"]) else "Despesa"
@@ -144,7 +263,6 @@ def interpretar_mensagem(texto_mensagem):
                     continue
                 break
                 
-    # Se a IA falhar totalmente por sobrecarga, usa o extrator local automático!
     return extrair_dados_localmente(texto_mensagem)
 
 # ================= COMANDOS E HANDLERS =================
@@ -153,12 +271,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     mensagem_ajuda = (
-        "🤖 **Assistente Financeiro Seguro Ativo!**\n\n"
+        "🤖 **Assistente Financeiro Interativo Ativo!**\n\n"
         "Envie uma mensagem natural ou áudio (ex: *'Gastei 45 no supermercado no pix'*, *'Recebi 3000 de salário'*).\n\n"
-        "**Comandos disponíveis:**\n"
-        "• /resumo - Balanço total e por categorias do mês\n"
-        "• /desfazer - Apaga o último registo guardado\n"
-        "• /ajuda - Mostra esta lista de comandos"
+        "✨ **Comandos Disponíveis:**\n"
+        "📊 /resumo - Balanço completo do mês com gráficos textuais\n"
+        "📄 /pdf - Gera e envia o relatório financeiro em PDF\n"
+        "🗑️ /desfazer - Apaga a última transação inserida\n"
+        "❓ /ajuda - Exibe este menu de ajuda"
     )
     await update.message.reply_text(mensagem_ajuda, parse_mode="Markdown")
 
@@ -171,21 +290,41 @@ async def cmd_resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_despesas = resumo["Despesa"]
     saldo = total_receitas - total_despesas
     
+    emoji_saldo = "🟢" if saldo >= 0 else "🔴"
+    
     texto = (
         f"📊 **Balanço Financeiro do Mês**\n\n"
         f"📈 **Entradas:** R$ {total_receitas:.2f}\n"
         f"📉 **Saídas:** R$ {total_despesas:.2f}\n"
-        f"💰 **Saldo Atual:** R$ {saldo:.2f}\n\n"
-        f"📂 **Gastos por Categoria:**\n"
+        f"{emoji_saldo} **Saldo Atual:** R$ {saldo:.2f}\n\n"
+        f"🏷️ **Gastos por Categoria:**\n"
     )
     
     if categorias:
         for cat, total in categorias:
-            texto += f"• {cat}: R$ {total:.2f}\n"
+            e_cat = EMOJIS_CATEGORIAS.get(cat, "📦")
+            texto += f"{e_cat} **{cat}:** R$ {total:.2f}\n"
     else:
-        texto += "• Nenhum gasto registado ainda.\n"
+        texto += "• Nenhum gasto registrado este mês.\n"
 
     await update.message.reply_text(texto, parse_mode="Markdown")
+
+async def cmd_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != MEU_TELEGRAM_ID:
+        return
+        
+    await update.message.reply_text("📄 *Gerando o relatório financeiro em PDF...*", parse_mode="Markdown")
+    try:
+        caminho_pdf = gerar_pdf_relatorio()
+        await update.message.reply_document(
+            document=open(caminho_pdf, 'rb'),
+            filename=f"Relatorio_Financeiro_{datetime.now().strftime('%m_%Y')}.pdf",
+            caption="📊 Aqui está o seu relatório detalhado em PDF!"
+        )
+        if os.path.exists(caminho_pdf):
+            os.remove(caminho_pdf)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro ao gerar PDF: {str(e)}")
 
 async def cmd_desfazer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != MEU_TELEGRAM_ID:
@@ -193,9 +332,9 @@ async def cmd_desfazer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     removido = apagar_ultimo_registo()
     if removido:
-        await update.message.reply_text(f"🗑️ Último registo apagado com sucesso:\n• {removido[1]} (R$ {removido[2]:.2f})")
+        await update.message.reply_text(f"🗑️ **Registro removido com sucesso:**\n• {removido[1]} (R$ {removido[2]:.2f})", parse_mode="Markdown")
     else:
-        await update.message.reply_text("ℹ️ Não existem registos para apagar.")
+        await update.message.reply_text("ℹ️ Não existem registros no histórico para apagar.")
 
 async def tratar_mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -208,7 +347,7 @@ async def tratar_mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text:
         texto_para_analisar = update.message.text
     elif update.message.voice or update.message.audio:
-        await update.message.reply_text("🎙️ Processando áudio...")
+        await update.message.reply_text("🎙️ *Processando áudio...*", parse_mode="Markdown")
         arquivo_voz = await context.bot.get_file(update.message.voice.file_id)
         caminho_audio = "audio_temp.ogg"
         await arquivo_voz.download_to_drive(caminho_audio)
@@ -236,19 +375,27 @@ async def tratar_mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         salvar_transacao(tipo, descricao, valor, categoria, forma_pagamento)
         
-        emoji = "📈" if tipo.lower() == "receita" else "💸"
+        # Escolha de Emojis Dinâmicos
+        if tipo.lower() == "receita":
+            emoji_tipo = "📈"
+            tag_cor = "🟢 **ENTRADA**"
+        else:
+            emoji_tipo = "💸"
+            tag_cor = "🔴 **SAÍDA**"
+
+        emoji_cat = EMOJIS_CATEGORIAS.get(categoria, "📦")
+        
         resposta = (
-            f"{emoji} **Registro Salvo com Sucesso!**\n\n"
-            f"• **Tipo:** {tipo}\n"
-            f"• **Descrição:** {descricao}\n"
-            f"• **Valor:** R$ {valor:.2f}\n"
-            f"• **Categoria:** {categoria}\n"
-            f"• **Forma de Pgto:** {forma_pagamento}"
+            f"{emoji_tipo} {tag_cor} **Registrada!**\n\n"
+            f"📝 **Descrição:** {descricao}\n"
+            f"💰 **Valor:** R$ {valor:.2f}\n"
+            f"{emoji_cat} **Categoria:** {categoria}\n"
+            f"💳 **Forma de Pgto:** {forma_pagamento}"
         )
         await update.message.reply_text(resposta, parse_mode="Markdown")
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Erro ao processar registo: {str(e)}")
+        await update.message.reply_text(f"❌ Erro ao processar registro: {str(e)}")
 
 # ================= INICIALIZAÇÃO =================
 if __name__ == '__main__':
@@ -258,6 +405,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("ajuda", cmd_start))
     app.add_handler(CommandHandler("resumo", cmd_resumo))
+    app.add_handler(CommandHandler("pdf", cmd_pdf))
+    app.add_handler(CommandHandler("relatorio", cmd_pdf))
     app.add_handler(CommandHandler("desfazer", cmd_desfazer))
     
     app.add_handler(MessageHandler(filters.TEXT | filters.VOICE | filters.AUDIO, tratar_mensagem))
