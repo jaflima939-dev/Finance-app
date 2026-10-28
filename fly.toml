@@ -1,16 +1,10 @@
-
-app = 'finance-app-tsvabq'
+app = 'financeiro-tranquil-pinecone-1384'
 primary_region = 'gru'
 
 [build]
+  dockerfile = "Dockerfile"
 
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-
-  [experimental]
-  auto_roll_releases = false
-
-[processes]
-  app = "python bot.py"
