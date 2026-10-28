@@ -22,17 +22,17 @@ MEU_TELEGRAM_ID = 6159661624
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Mapas de emojis para tornar as respostas e categorias visuais
+# Novas Categorias Personalizadas e Emojis
 EMOJIS_CATEGORIAS = {
-    "Alimentação": "🍔",
     "Transporte": "🚗",
     "Lazer": "🎉",
+    "Despesas": "💸",
+    "Farmácia": "💊",
+    "Médico": "🩺",
     "Saúde": "🏥",
-    "Moradia": "🏠",
-    "Educação": "📚",
-    "Investimentos": "📊",
+    "Outros": "📦",
     "Salário": "💼",
-    "Outros": "📦"
+    "Investimentos": "📊"
 }
 
 # ================= BANCO DE DADOS =================
@@ -134,7 +134,7 @@ def gerar_pdf_relatorio(nome_arquivo="relatorio_financeiro.pdf"):
         parent=styles['Heading1'],
         fontSize=20,
         textColor=colors.HexColor('#1E293B'),
-        spaceAfter=12
+        spaceAfter=6
     )
     
     sub_style = ParagraphStyle(
@@ -142,14 +142,14 @@ def gerar_pdf_relatorio(nome_arquivo="relatorio_financeiro.pdf"):
         parent=styles['Normal'],
         fontSize=11,
         textColor=colors.HexColor('#64748B'),
-        spaceAfter=20
+        spaceAfter=15
     )
 
     story = []
     story.append(Paragraph(f"Relatório Financeiro — {mes_nome}", title_style))
-    story.append(Paragraph(f"Gerado automaticamente pelo Assistente Financeiro", sub_style))
+    story.append(Paragraph("Gerado automaticamente pelo Assistente Financeiro", sub_style))
 
-    # Tabela Resumo
+    # Tabela Resumo Geral
     total_rec = resumo["Receita"]
     total_desp = resumo["Despesa"]
     saldo = total_rec - total_desp
@@ -165,17 +165,41 @@ def gerar_pdf_relatorio(nome_arquivo="relatorio_financeiro.pdf"):
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
         ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#0F172A')),
         ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
-        ('TOPPADDING', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
         ('ALIGN', (1,0), (1,-1), 'RIGHT'),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
     ]))
     story.append(t_resumo)
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 15))
 
-    # Tabela de Extrato de Transações
+    # Tabela de Totais por Categoria no PDF
+    story.append(Paragraph("<b>Totais por Categoria (Despesas):</b>", styles['Heading2']))
+    story.append(Spacer(1, 8))
+
+    data_cat = [["Categoria", "Total Gasto (R$)"]]
+    if categorias:
+        for cat, total in categorias:
+            data_cat.append([cat, f"R$ {total:.2f}"])
+    else:
+        data_cat.append(["Nenhuma despesa registrada", "R$ 0.00"])
+
+    t_cat = Table(data_cat, colWidths=[300, 200])
+    t_cat.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+    ]))
+    story.append(t_cat)
+    story.append(Spacer(1, 15))
+
+    # Tabela de Extrato Detalhado
     story.append(Paragraph("<b>Extrato Detalhado do Mês:</b>", styles['Heading2']))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
 
     data_trans = [["Data/Hora", "Tipo", "Descrição", "Categoria", "Pgto", "Valor (R$)"]]
     for t in transacoes:
@@ -184,20 +208,20 @@ def gerar_pdf_relatorio(nome_arquivo="relatorio_financeiro.pdf"):
         data_trans.append([
             data_f,
             t[1],
-            t[2][:20], # Limita descrição
+            t[2][:20],
             t[4],
             t[5],
             f"{sinal} {t[3]:.2f}"
         ])
 
-    t_extrato = Table(data_trans, colWidths=[80, 65, 130, 85, 75, 65])
+    t_extrato = Table(data_trans, colWidths=[80, 60, 135, 85, 75, 65])
     t_extrato.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0F172A')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-        ('TOPPADDING', (0,0), (-1,-1), 6),
-        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('FONTSIZE', (0,0), (-1,-1), 8.5),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
         ('ALIGN', (5,0), (5,-1), 'RIGHT'),
     ]))
@@ -206,7 +230,7 @@ def gerar_pdf_relatorio(nome_arquivo="relatorio_financeiro.pdf"):
     doc.build(story)
     return nome_arquivo
 
-# ================= BACKUP LOCAL INTELIGENTE (SEM IA) =================
+# ================= BACKUP LOCAL INTELIGENTE =================
 def extrair_dados_localmente(texto):
     texto_limpo = texto.replace(',', '.')
     numeros = re.findall(r'\d+(?:\.\d+)?', texto_limpo)
@@ -235,7 +259,7 @@ def interpretar_mensagem(texto_mensagem):
     TIPO: (Receita ou Despesa)
     DESCRICAO: (breve descrição do gasto ou ganho)
     VALOR: (apenas o número com ponto decimal, ex: 50.00)
-    CATEGORIA: (Escolha obrigatoriamente uma destas: Alimentação, Transporte, Lazer, Saúde, Moradia, Educação, Investimentos, Salário, Outros)
+    CATEGORIA: (Escolha obrigatoriamente UMA destas opções exatas: Transporte, Lazer, Despesas, Farmácia, Médico, Saúde, Outros, Salário, Investimentos)
     FORMA_PAGAMENTO: (Pix, Cartão de Crédito, Cartão de Débito, Espécie, Transferência ou Não Especificado)
     """
     
@@ -271,13 +295,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     mensagem_ajuda = (
-        "🤖 **Assistente Financeiro Interativo Ativo!**\n\n"
-        "Envie uma mensagem natural ou áudio (ex: *'Gastei 45 no supermercado no pix'*, *'Recebi 3000 de salário'*).\n\n"
+        "🤖 **Assistente Financeiro Ativo!**\n\n"
+        "Envie uma mensagem natural (ex: *'Gastei 45 de transporte no uber'*, *'Paguei 60 na farmácia'*).\n\n"
         "✨ **Comandos Disponíveis:**\n"
-        "📊 /resumo - Balanço completo do mês com gráficos textuais\n"
-        "📄 /pdf - Gera e envia o relatório financeiro em PDF\n"
-        "🗑️ /desfazer - Apaga a última transação inserida\n"
-        "❓ /ajuda - Exibe este menu de ajuda"
+        "📊 /resumo - Balanço completo e gastos por categoria\n"
+        "📄 /pdf - Gera o relatório em PDF com resumo por categoria e extrato\n"
+        "🗑️ /desfazer - Apaga o último registro\n"
+        "❓ /ajuda - Exibe este menu"
     )
     await update.message.reply_text(mensagem_ajuda, parse_mode="Markdown")
 
@@ -319,7 +343,7 @@ async def cmd_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_document(
             document=open(caminho_pdf, 'rb'),
             filename=f"Relatorio_Financeiro_{datetime.now().strftime('%m_%Y')}.pdf",
-            caption="📊 Aqui está o seu relatório detalhado em PDF!"
+            caption="📊 Aqui está o seu relatório em PDF atualizado com as categorias!"
         )
         if os.path.exists(caminho_pdf):
             os.remove(caminho_pdf)
@@ -375,7 +399,6 @@ async def tratar_mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         salvar_transacao(tipo, descricao, valor, categoria, forma_pagamento)
         
-        # Escolha de Emojis Dinâmicos
         if tipo.lower() == "receita":
             emoji_tipo = "📈"
             tag_cor = "🟢 **ENTRADA**"
