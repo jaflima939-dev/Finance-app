@@ -1,2 +1,7 @@
+Plaintext
+
 python-telegram-bot
 google-genai
+httpx
+requests
+reportlab
