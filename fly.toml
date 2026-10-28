@@ -8,4 +8,9 @@ primary_region = 'gru'
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-  
+
+  [experimental]
+  auto_roll_releases = false
+
+[processes]
+  app = "python bot.py"
